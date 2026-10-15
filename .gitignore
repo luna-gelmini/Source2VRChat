@@ -1,0 +1,5 @@
+*_converted/
+__pycache__/
+*.pyc
+*.blend1
+*.meta
