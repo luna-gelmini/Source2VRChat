@@ -52,7 +52,7 @@ when Blender exits. They are harmless: the textures are still converted.
 ## 2. Set up the avatar in Unity
 
 1. Install the Unity tool, one of:
-   - VRChat Creator Companion: open https://luna-gelmini.github.io/vpm/, press **Add to VCC**,
+   - VRChat Creator Companion: open https://vpm.ladyluh.dev/, press **Add to VCC**,
      then add **Source Avatar Setup (source2vrchat)** to your project.
    - `.unitypackage`: download `Source2VRChat-<version>.unitypackage` from
      [Releases](https://github.com/luna-gelmini/Source2VRChat/releases) and drag it into Unity.
