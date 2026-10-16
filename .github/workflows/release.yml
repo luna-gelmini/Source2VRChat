@@ -1,0 +1,54 @@
+name: Release
+
+# Publish a release on GitHub (tag vX.Y.Z, matching package.json) and this attaches the VCC zip
+# and the .unitypackage to it. Run it by hand to rebuild the files of an existing release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to rebuild, e.g. v1.0.1
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE_DIR: unity
+  UNITYPACKAGE_FOLDER: Source2VRChat
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: luna-gelmini/vpm
+          path: .vpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build package files
+        run: python .vpm/build.py --package "$PACKAGE_DIR" --folder "$UNITYPACKAGE_FOLDER" --tag "$TAG" --out dist
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber
+
+      # Optional: with a VPM_DISPATCH_TOKEN secret (fine-grained token with Contents: read & write
+      # on luna-gelmini/vpm), the VCC listing updates right away instead of within the hour.
+      - name: Update the VCC listing
+        env:
+          VPM_TOKEN: ${{ secrets.VPM_DISPATCH_TOKEN }}
+        if: env.VPM_TOKEN != ''
+        run: |
+          curl -fsS -X POST             -H "Authorization: Bearer $VPM_TOKEN"             -H "Accept: application/vnd.github+json"             https://api.github.com/repos/luna-gelmini/vpm/dispatches             -d '{"event_type":"package-released"}'
