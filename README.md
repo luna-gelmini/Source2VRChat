@@ -30,7 +30,7 @@ blender -b --factory-startup -P blender/gma2blend.py -- addon.gma out_dir [optio
 
 | Option | Effect |
 | --- | --- |
-| `--all-models` | Also convert `c_arms` and viewmodel models |
+| `--all-models` | Also convert `c_arms`, viewmodel and NPC-copy models |
 | `--keep-outline` | Keep inverted-hull outline geometry |
 | `--no-fbx` | Write only `.blend` files |
 | `--no-legfix` | Leave hip and limb bones as they are |
@@ -51,7 +51,13 @@ when Blender exits. They are harmless: the textures are still converted.
 
 ## 2. Set up the avatar in Unity
 
-1. Copy `unity/Editor/SourceAvatarSetup.cs` into an `Editor` folder in your project.
+1. Install the Unity tool, one of:
+   - VRChat Creator Companion: open https://luna-gelmini.github.io/vpm/, press **Add to VCC**,
+     then add **Source Avatar Setup (source2vrchat)** to your project.
+   - `.unitypackage`: download `Source2VRChat-<version>.unitypackage` from
+     [Releases](https://github.com/luna-gelmini/Source2VRChat/releases) and drag it into Unity.
+   - Git URL: Window → Package Manager → **+** → *Add package from git URL* →
+     `https://github.com/luna-gelmini/Source2VRChat.git?path=/unity`
 2. Copy the converted folder (FBX, `Textures`, `report.json`) into `Assets`.
 3. Drag the FBX into the scene and add a VRC Avatar Descriptor.
 4. Open **Tools > Source Avatar Setup**, pick the avatar and `report.json`, then press **Run**.

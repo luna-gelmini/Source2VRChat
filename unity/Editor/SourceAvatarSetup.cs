@@ -106,14 +106,11 @@ namespace Source2VRChat
             importer.materialImportMode = ModelImporterMaterialImportMode.None;
             importer.SaveAndReimport();
 
-            // The auto-mapper likes to pick a front hair bone as the jaw. The mapping only
-            // exists after the humanoid import above, so this needs a second pass.
+            // The auto-mapping only exists after the humanoid import above, so it's corrected in a second pass.
             var description = importer.humanDescription;
-            var human = description.human.ToList();
-            var removed = human.RemoveAll(b => b.humanName == "Jaw" && b.boneName.IndexOf("jaw", StringComparison.OrdinalIgnoreCase) < 0);
-            if (removed > 0)
+            var changed = CorrectMapping(ref description);
+            if (changed > 0)
             {
-                description.human = human.ToArray();
                 importer.humanDescription = description;
                 importer.SaveAndReimport();
             }
@@ -124,7 +121,59 @@ namespace Source2VRChat
                 animator.avatar = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Avatar>().FirstOrDefault();
                 animator.Rebind();
             }
-            log.Add($"Import: Humanoid set on {Path.GetFileName(path)}" + (removed > 0 ? ", removed Jaw mapped to hair." : "."));
+            log.Add($"Import: Humanoid set on {Path.GetFileName(path)}" + (changed > 0 ? $", {changed} bone mappings corrected." : "."));
+        }
+
+        /// <summary>
+        /// gma2blend names humanoid bones exactly, so those names win. Optional slots the auto-mapper
+        /// filled with unrelated bones (hair as Jaw, physics chains as fingers or eyes) are cleared.
+        /// </summary>
+        int CorrectMapping(ref HumanDescription description)
+        {
+            var bones = new HashSet<string>(avatar.GetComponentsInChildren<Transform>(true).Select(t => t.name));
+            var mapping = description.human.ToDictionary(b => b.humanName, b => b.boneName);
+            int changed = 0;
+            for (int i = 0; i < HumanTrait.BoneCount; i++)
+            {
+                var humanName = HumanTrait.BoneName[i];
+                var exact = humanName.Replace(" ", "");
+                if (bones.Contains(exact))
+                {
+                    if (!mapping.TryGetValue(humanName, out var current) || current != exact)
+                    {
+                        mapping[humanName] = exact;
+                        changed++;
+                    }
+                }
+                else if (!HumanTrait.RequiredBone(i) && mapping.TryGetValue(humanName, out var bone) && !Resembles(humanName, bone))
+                {
+                    mapping.Remove(humanName);
+                    changed++;
+                }
+            }
+            description.human = mapping.Select(m => new HumanBone
+            {
+                humanName = m.Key, boneName = m.Value, limit = new HumanLimit { useDefaultValues = true },
+            }).ToArray();
+            return changed;
+        }
+
+        static readonly (string slot, string[] words)[] SlotWords =
+        {
+            ("Thumb", new[] { "thumb", "finger0" }), ("Index", new[] { "index", "finger1" }),
+            ("Middle", new[] { "middle", "finger2" }), ("Ring", new[] { "ring", "finger3" }),
+            ("Little", new[] { "little", "pinky", "finger4" }), ("Eye", new[] { "eye" }), ("Jaw", new[] { "jaw" }),
+            ("Toes", new[] { "toe" }), ("Shoulder", new[] { "shoulder", "clavicle", "collar" }),
+            ("Chest", new[] { "chest", "spine" }), ("Neck", new[] { "neck" }),
+        };
+
+        static bool Resembles(string humanName, string boneName)
+        {
+            var bone = boneName.ToLowerInvariant();
+            foreach (var (slot, words) in SlotWords)
+                if (humanName.Contains(slot))
+                    return words.Any(bone.Contains);
+            return true;
         }
 
 
@@ -137,9 +186,14 @@ namespace Source2VRChat
 
             var created = new Dictionary<string, Material>();
             int assigned = 0, uncertain = 0;
+            // Addons often ship several models with identically named meshes; prefer the one this FBX came from.
+            var fbx = avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true).Select(r => r.sharedMesh).Where(m => m)
+                .Select(m => Path.GetFileNameWithoutExtension(AssetDatabase.GetAssetPath(m))).FirstOrDefault();
+            var models = data.models.Where(m => m.model == fbx).DefaultIfEmpty().ToArray();
+            if (models[0] == null) models = data.models;
             foreach (var renderer in avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                var source = data.models.SelectMany(m => m.meshes).FirstOrDefault(m => m.name == renderer.name);
+                var source = models.SelectMany(m => m.meshes).FirstOrDefault(m => m.name == renderer.name);
                 if (source == null || source.materials.Length == 0 || !renderer.sharedMesh) continue;
 
                 var mesh = renderer.sharedMesh;
@@ -154,7 +208,7 @@ namespace Source2VRChat
                         .OrderBy(i => Math.Abs(source.material_tris[i] - tris)).DefaultIfEmpty(-1).First();
                     if (match < 0)
                         match = Math.Min(sub, used.Length - 1);
-                    else if (used.Length > 1 && source.material_tris[match] != tris)
+                    else if (used.Length > 1 && Math.Abs(source.material_tris[match] - tris) > Math.Max(2, tris / 50))
                         uncertain++;
                     used[match] = true;
                     slots[sub] = GetMaterial(source.materials[match], data, folder, materialFolder, created);
@@ -219,9 +273,14 @@ namespace Source2VRChat
             var descriptor = avatar.GetComponent<VRCAvatarDescriptor>();
             var left = animator.GetBoneTransform(HumanBodyBones.LeftEye);
             var right = animator.GetBoneTransform(HumanBodyBones.RightEye);
-            if (!descriptor || !left || !right)
+            if (!descriptor)
             {
-                log.Add("Eyes: needs an avatar descriptor and humanoid eye bones.");
+                log.Add("Eyes: add a VRC Avatar Descriptor first.");
+                return;
+            }
+            if (!left || !right)
+            {
+                log.Add("Eyes: no eye bones, skipped (eyes are probably part of the face texture).");
                 return;
             }
 

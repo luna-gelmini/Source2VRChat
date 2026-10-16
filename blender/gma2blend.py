@@ -43,8 +43,8 @@ for _s, _side in (("L", "Left"), ("R", "Right")):
             SFM_NAMES[f"{_finger}_{_j}_{_s}"] = f"{_side}{_human}{_joint}"
 
 VIEWMODEL = re.compile(r"(^|[_/\\])(c_arms|v_|arms|hands)([_.]|$)", re.I)
+NPC_FOLDER = re.compile(r"[/\\]npcs?[/\\]", re.I)
 HELPER_BONE = re.compile(r"twist|_root|elbow|knee|wrist|ulna|bicep", re.I)
-ENGINE_TEXTURES = {"normal", "phong_exp", "lightwarptexture"}
 
 
 
@@ -92,6 +92,8 @@ def read_vmt_materials(addon_dir):
     materials = []
     key = re.compile(r'"?\$(\w+)"?\s+"?([^"\r\n]+)"?')
     for folder, _, files in os.walk(os.path.join(addon_dir, "materials")):
+        if re.search(r"[/\\](vgui|entities|spawnicons)([/\\]|$)", folder, re.I):
+            continue  # spawn menu icons, not model materials
         for name in files:
             if not name.lower().endswith(".vmt"):
                 continue
@@ -182,10 +184,14 @@ def remove_outline_hulls():
 
 
 def export_textures(addon_dir, out_dir):
-    """Save every texture as PNG, converting the VTFs SourceIO skipped (unsupported shaders)."""
+    """Save every base texture as PNG, converting the VTFs SourceIO skipped (unsupported shaders).
+
+    Lightwarp ramps, normal maps and engine placeholders are left out: VRChat shaders can't use them.
+    """
     import bpy
 
     os.makedirs(out_dir, exist_ok=True)
+    wanted = {m["texture"].lower() for m in read_vmt_materials(addon_dir) if m["texture"]}
     saved, notes = set(), []
 
     def save(image, stem):
@@ -197,15 +203,13 @@ def export_textures(addon_dir, out_dir):
     for image in bpy.data.images:
         stem = os.path.basename(image.name).removesuffix(".vtf")
         # Reading size loads the pixel buffer; has_data stays False until then.
-        if image.size[0] > 1 and not image.name.startswith("SIOe_") and stem.lower() not in ENGINE_TEXTURES:
+        if image.size[0] > 1 and stem.lower() in wanted:
             save(image, stem)
 
     for folder, _, files in os.walk(os.path.join(addon_dir, "materials")):
-        if re.search(r"[/\\](vgui|shared)([/\\]|$)", folder, re.I):
-            continue
         for name in files:
             stem = name[:-4]
-            if not name.lower().endswith(".vtf") or stem.lower() in saved:
+            if not name.lower().endswith(".vtf") or stem.lower() in saved or stem.lower() not in wanted:
                 continue
             before = set(bpy.data.images.keys())
             call_operator(bpy.ops.sourceio.vtf, filepath=os.path.join(folder, name),
@@ -366,7 +370,7 @@ def main(argv):
     parser = argparse.ArgumentParser(prog="gma2blend", description=__doc__.splitlines()[0])
     parser.add_argument("addon", help=".gma file or extracted addon folder")
     parser.add_argument("out_dir")
-    parser.add_argument("--all-models", action="store_true", help="also convert c_arms / viewmodels")
+    parser.add_argument("--all-models", action="store_true", help="also convert c_arms, viewmodels and NPC copies")
     parser.add_argument("--keep-outline", action="store_true", help="keep inverted-hull outline faces")
     parser.add_argument("--no-fbx", action="store_true", help="only write .blend files")
     parser.add_argument("--no-legfix", action="store_true", help="leave hip and limb bones untouched")
@@ -388,6 +392,10 @@ def main(argv):
     )
     if not mdls:
         sys.exit("No player models found in the addon.")
+    # Addons often ship the player model again as an NPC; same mesh, so skip those copies.
+    players = [m for m in mdls if not NPC_FOLDER.search(m)]
+    if players and not args.all_models:
+        mdls = players
 
     os.makedirs(out_dir, exist_ok=True)
     models = [convert_model(mdl, addon_dir, out_dir, args) for mdl in mdls]

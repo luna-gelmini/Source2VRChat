@@ -1,0 +1,17 @@
+{
+  "name": "dev.ladyluh.source2vrchat",
+  "displayName": "Source Avatar Setup (source2vrchat)",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "description": "Unity half of source2vrchat: sets up Garry's Mod / Source Filmmaker models converted by gma2blend as VRChat avatars.",
+  "author": {
+    "name": "luna-gelmini",
+    "url": "https://github.com/luna-gelmini"
+  },
+  "license": "MIT",
+  "documentationUrl": "https://github.com/luna-gelmini/Source2VRChat",
+  "url": "https://github.com/luna-gelmini/Source2VRChat/releases/download/v1.0.0/dev.ladyluh.source2vrchat-1.0.0.zip",
+  "vpmDependencies": {
+    "com.vrchat.avatars": ">=3.7.0"
+  }
+}
